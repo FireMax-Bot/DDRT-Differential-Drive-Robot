@@ -13,7 +13,7 @@
 ## Demo
 
 > *e.g., "Move Like ciricle shape with distance 80cm"*
-(docs/demo.gif) 
+![Demo](docs/demo.gif)
 
 | Robot Hardware | Ground Control Station |
 |:-:|:-:|
