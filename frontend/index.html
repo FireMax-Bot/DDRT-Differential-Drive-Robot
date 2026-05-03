@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DDRT Robot Ground Control</title>
+<style>
+  
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-primary:    #0a0a0a;
+    --bg-secondary:  #141414;
+    --bg-tertiary:   #1a1a1a;
+    --border:        #2a2a2a;
+    --border-hover:  #3a3a3a;
+    
+    --accent:        #831212;
+    --accent-dim:    rgba(14, 165, 233, 0.12);
+    --accent-bright: rgba(14, 165, 233, 0.25);
+    
+    --success:       #10b981;
+    --danger:        #ef4444;
+    --warning:       #f59e0b;
+    
+    --text-primary:  #e5e5e5;
+    --text-secondary:#9ca3af;
+    --text-muted:    #6b7280;
+    
+    --radius-sm:     6px;
+    --radius-md:     8px;
+    --radius-lg:     12px;
+    
+    --shadow-sm:     0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md:     0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 24px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1 { 
+    font-size: 1.5rem; 
+    font-weight: 600; 
+    letter-spacing: -0.025em;
+    margin-bottom: 4px;
+  }
+  
+  h2 { 
+    font-size: 0.75rem; 
+    font-weight: 600; 
+    letter-spacing: 0.1em;
+    text-transform: uppercase; 
+    color: var(--text-muted); 
+    margin-bottom: 16px;
+  }
+
+  /* ===== Layout ===== */
+  .header {
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+  }
+
+  .status-dot {
+    width: 8px; 
+    height: 8px; 
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: all 0.3s ease;
+  }
+  
+  .status-dot.ok { 
+    background: var(--success); 
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+  }
+  
+  .status-dot.error { 
+    background: var(--danger);
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+
+  @media (max-width: 768px) {
+    .grid { grid-template-columns: 1fr; }
+    body { padding: 16px; }
+  }
+
+  .card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    transition: border-color 0.2s ease;
+  }
+
+  .card:hover {
+    border-color: var(--border-hover);
+  }
+
+  /* ===== D-pad Control ===== */
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 64px);
+    grid-template-rows: repeat(3, 64px);
+    gap: 8px;
+    justify-content: center;
+    margin: 12px auto;
+  }
+
+  .dpad button {
+    width: 64px; 
+    height: 64px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 1.4rem;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.15s ease;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .dpad button:hover {
+    background: var(--bg-secondary);
+    border-color: var(--border-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .dpad button:active,
+  .dpad button.pressed { 
+    background: var(--accent);
+    border-color: var(--accent);
+    transform: scale(0.95);
+    box-shadow: none;
+  }
+  
+  .dpad button:empty { 
+    background: transparent; 
+    border: none; 
+    pointer-events: none;
+    box-shadow: none;
+  }
+
+  /* ===== Action Buttons ===== */
+  .action-row {
+    display: flex; 
+    flex-wrap: wrap; 
+    gap: 10px; 
+    margin-top: 16px;
+  }
+
+  .btn {
+    padding: 10px 18px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  
+  .btn:hover {
+    background: var(--bg-secondary);
+    border-color: var(--border-hover);
+    transform: translateY(-1px);
+  }
+  
+  .btn.danger {
+    border-color: rgba(239, 68, 68, 0.3);
+    color: var(--danger);
+  }
+  
+  .btn.danger:hover {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: var(--danger);
+  }
+  
+  .btn.primary {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+  
+  .btn.primary:hover {
+    background: var(--accent-bright);
+  }
+  
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* ===== LLM Input ===== */
+  .llm-input-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  textarea {
+    flex: 1;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    padding: 12px 14px;
+    resize: vertical;
+    min-height: 72px;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.2s ease;
+  }
+  
+  textarea::placeholder {
+    color: var(--text-muted);
+  }
+  
+  textarea:focus {
+    border-color: var(--accent);
+    background: var(--bg-secondary);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+
+  #send-btn {
+    align-self: flex-end;
+    padding: 12px 24px;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius-md);
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  
+  #send-btn:hover {
+    background: #0891d1;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+  
+  #send-btn:active {
+    transform: scale(0.98);
+  }
+  
+  #send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* ===== Response Log ===== */
+  #log {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    color: var(--text-secondary);
+    min-height: 56px;
+    max-height: 120px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  
+  .log-ok { color: var(--success); }
+  .log-err { color: var(--danger); }
+  .log-info { color: var(--accent); }
+
+  /* ===== Canvas Map ===== */
+  .map-wrapper {
+    position: relative;
+    display: none;
+    margin-top: 16px;
+  }
+
+  canvas#map {
+    width: 100%;
+    max-width: 600px;
+    aspect-ratio: 1;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    display: block;
+    margin: 0 auto;
+  }
+
+  .map-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 8px;
+    justify-content: center;
+  }
+  
+  .map-legend span::before {
+    content: '●';
+    margin-right: 6px;
+  }
+  
+  .map-legend .l-path { color: var(--accent); }
+  .map-legend .l-origin { color: var(--success); }
+  .map-legend .l-robot { color: var(--danger); }
+
+  /* ===== Odometry Display ===== */
+  .odo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 12px;
+  }
+  
+  .odo-cell {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    text-align: center;
+    transition: border-color 0.2s ease;
+  }
+  
+  .odo-cell:hover {
+    border-color: var(--border-hover);
+  }
+  
+  .odo-cell .label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  .odo-cell .value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+
+  /* ===== Calibration Grid ===== */
+  .calibration-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  /* ===== Tuning Controls ===== */
+  .tune-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .tune-row label {
+    flex: 0 0 120px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+  }
+
+  .tune-row input[type="range"] {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+    outline: none;
+    -webkit-appearance: none;
+  }
+
+  .tune-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .tune-row input[type="range"]::-webkit-slider-thumb:hover {
+    background: #0891d1;
+    transform: scale(1.1);
+  }
+
+  .tune-row input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: none;
+  }
+
+  .tune-row .value-display {
+    flex: 0 0 60px;
+    text-align: right;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+
+  /* ===== Loading Spinner ===== */
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* ===== Scrollbar Styling ===== */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-hover);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #4a4a4a;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>DDRT Robot Ground Control</h1>
+    <div class="status-indicator">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">Checking connection…</span>
+    </div>
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- ===== Manual Control ===== -->
+  <div class="card">
+    <h2>Manual Control</h2>
+
+    <div class="dpad">
+      <!-- Row 1 -->
+      <span></span>
+      <button id="btn-forward"
+        onmousedown="startMove('forward')" ontouchstart="startMove('forward')"
+        onmouseup="stopMove()" ontouchend="stopMove()" onmouseleave="stopMove()">▲</button>
+      <span></span>
+      <!-- Row 2 -->
+      <button id="btn-left"
+        onmousedown="startMove('left')" ontouchstart="startMove('left')"
+        onmouseup="stopMove()" ontouchend="stopMove()" onmouseleave="stopMove()">◀</button>
+      <span></span>
+      <button id="btn-right"
+        onmousedown="startMove('right')" ontouchstart="startMove('right')"
+        onmouseup="stopMove()" ontouchend="stopMove()" onmouseleave="stopMove()">▶</button>
+      <!-- Row 3 -->
+      <span></span>
+      <button id="btn-backward"
+        onmousedown="startMove('backward')" ontouchstart="startMove('backward')"
+        onmouseup="stopMove()" ontouchend="stopMove()" onmouseleave="stopMove()">▼</button>
+      <span></span>
+    </div>
+
+    <div class="action-row">
+      <button class="btn" onclick="returnShortest()">↩ Return Shortest</button>
+      <button class="btn" onclick="returnPath()">↺ Return Path</button>
+      <button class="btn danger" onclick="resetAll()">✕ Reset Memory</button>
+    </div>
+  </div>
+
+  <!-- ===== Odometry ===== -->
+  <div class="card">
+    <h2>Live Odometry</h2>
+    <div class="odo-grid">
+      <div class="odo-cell">
+        <div class="label">X (m)</div>
+        <div class="value" id="odo-x">0.0000</div>
+      </div>
+      <div class="odo-cell">
+        <div class="label">Y (m)</div>
+        <div class="value" id="odo-y">0.0000</div>
+      </div>
+      <div class="odo-cell">
+        <div class="label">θ (deg)</div>
+        <div class="value" id="odo-t">0.0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== LLM Control ===== -->
+  <div class="card">
+    <h2>LLM Control</h2>
+
+    <div class="llm-input-row">
+      <textarea id="llmInput" placeholder="e.g., Drive in a 50cm square"></textarea>
+      <button id="send-btn" onclick="sendLLM()">Send</button>
+    </div>
+
+    <div id="log"></div>
+
+    <div class="map-wrapper" id="map-wrapper">
+      <canvas id="map" width="600" height="600"></canvas>
+      <div class="map-legend">
+        <span class="l-path">Path</span>
+        <span class="l-origin">Origin</span>
+        <span class="l-robot">Robot</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Calibration ===== -->
+  <div class="card">
+    <h2>Calibration</h2>
+    <div class="calibration-grid">
+      <button class="btn" onclick="calibrate('forward')">▲ Forward</button>
+      <button class="btn" onclick="calibrate('backward')">▼ Backward</button>
+      <button class="btn" onclick="calibrate('left')">◀ Left</button>
+      <button class="btn" onclick="calibrate('right')">▶ Right</button>
+    </div>
+  </div>
+
+  <!-- ===== Hardware Tuning ===== -->
+  <div class="card">
+    <h2>Hardware Tuning</h2>
+
+    <div class="tune-row">
+      <label>Velocity</label>
+      <input type="range" id="vel-slider" min="0.05" max="0.30" step="0.01" value="0.15"
+        oninput="updateTune('velocity', this.value)">
+      <span class="value-display" id="vel-val">0.15</span>
+    </div>
+
+    <div class="tune-row">
+      <label>Turn Speed (L)</label>
+      <input type="range" id="tsl-slider" min="0.5" max="3.0" step="0.1" value="1.5"
+        oninput="updateTune('turn_speed_left', this.value)">
+      <span class="value-display" id="tsl-val">1.5</span>
+    </div>
+
+    <div class="tune-row">
+      <label>Turn Speed (R)</label>
+      <input type="range" id="tsr-slider" min="0.5" max="3.0" step="0.1" value="1.5"
+        oninput="updateTune('turn_speed_right', this.value)">
+      <span class="value-display" id="tsr-val">1.5</span>
+    </div>
+
+    <div class="tune-row">
+      <label>Left PWM</label>
+      <input type="range" id="lpwm-slider" min="100" max="255" step="5" value="200"
+        oninput="updateTune('left_pwm', this.value)">
+      <span class="value-display" id="lpwm-val">200</span>
+    </div>
+
+    <div class="tune-row">
+      <label>Right PWM</label>
+      <input type="range" id="rpwm-slider" min="100" max="255" step="5" value="200"
+        oninput="updateTune('right_pwm', this.value)">
+      <span class="value-display" id="rpwm-val">200</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+//  CONFIG
+// ============================================================
+
+const ESP_IP = "ESP_IP";
+const PY_URL = "http://localhost:5000";
+
+const canvas = document.getElementById("map");
+const ctx    = canvas.getContext("2d");
+const scale  = 200;   // pixels per meter
+
+let isMoving   = false;
+let pathData   = [];
+let mapVisible = false;
+
+
+// ============================================================
+//  HELPERS
+// ============================================================
+
+function log(msg, type = "info") {
+  const el  = document.getElementById("log");
+  const cls = type === "ok" ? "log-ok" : type === "err" ? "log-err" : "log-info";
+  el.innerHTML = `<span class="${cls}">${escHtml(msg)}</span>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function espGet(path) {
+  return fetch(`http://${ESP_IP}${path}`).catch(() => null);
+}
+
+function pyGet(path) {
+  return fetch(`${PY_URL}${path}`).catch(() => null);
+}
+
+function pyPost(path, body) {
+  return fetch(`${PY_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  }).catch(() => null);
+}
+
+
+// ============================================================
+//  CONNECTION STATUS
+// ============================================================
+
+async function checkStatus() {
+  const dot  = document.getElementById("status-dot");
+  const text = document.getElementById("status-text");
+
+  try {
+    const res  = await fetch(`${PY_URL}/status`, { signal: AbortSignal.timeout(3000) });
+    const data = await res.json();
+
+    if (data.esp32_reachable) {
+      dot.className = "status-dot ok";
+      text.textContent = "Connected — ESP32 reachable";
+    } else {
+      dot.className = "status-dot error";
+      text.textContent = "Flask OK — ESP32 unreachable";
+    }
+  } catch {
+    dot.className = "status-dot error";
+    text.textContent = "Flask not running";
+  }
+}
+
+setInterval(checkStatus, 5000);
+checkStatus();
+
+
+// ============================================================
+//  MANUAL CONTROL
+// ============================================================
+
+function startMove(dir) {
+  if (isMoving) return;
+  document.getElementById(`btn-${dir}`)?.classList.add("pressed");
+  espGet(`/move?action=${dir}`);
+}
+
+function stopMove() {
+  ["forward","backward","left","right"].forEach(d =>
+    document.getElementById(`btn-${d}`)?.classList.remove("pressed")
+  );
+  espGet("/stop");
+}
+
+function returnShortest() {
+  log("Executing Return Shortest…");
+  espGet("/return").then(r => r && log("Return Shortest sent.", "ok"));
+}
+
+function returnPath() {
+  log("Executing Return Path…");
+  espGet("/returnPath").then(r => r && log("Return Path sent.", "ok"));
+}
+
+async function resetAll() {
+  log("Resetting memory…");
+  await pyGet("/reset");
+  await espGet("/clearMemory");
+  pathData = [];
+  drawMap([]);
+  log("Memory cleared.", "ok");
+}
+
+function calibrate(mode) {
+  log(`Running calibration: ${mode}…`);
+  espGet(`/calibrate/${mode}`).then(r => r && r.text().then(t => log(t, "ok")));
+}
+
+
+// ============================================================
+//  HARDWARE TUNING
+// ============================================================
+
+function updateTune(variable, value) {
+  const displayId = {
+    'velocity': 'vel-val',
+    'turn_speed_left': 'tsl-val',
+    'turn_speed_right': 'tsr-val',
+    'left_pwm': 'lpwm-val',
+    'right_pwm': 'rpwm-val'
+  }[variable];
+
+  if (displayId) {
+    document.getElementById(displayId).textContent = value;
+  }
+
+  espGet(`/tune?var=${variable}&val=${value}`);
+}
+
+
+// ============================================================
+//  LLM MODE
+// ============================================================
+
+async function sendLLM() {
+  const text = document.getElementById("llmInput").value.trim();
+  if (!text) { log("Please type a command first.", "err"); return; }
+
+  const btn = document.getElementById("send-btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Executing…';
+
+  // Reset map for fresh mission
+  await pyGet("/reset");
+  await espGet("/clearMemory");
+  pathData = [];
+  drawMap([]);
+
+  // Show map panel
+  document.getElementById("map-wrapper").style.display = "block";
+  mapVisible = true;
+
+  log(`Sending to Gemini: "${text}"…`, "info");
+
+  const res = await pyPost("/command", { text });
+  if (!res) {
+    log("Network error — is llm_bridge_gem2.py running?", "err");
+    btn.disabled = false;
+    btn.textContent = "Send";
+    return;
+  }
+
+  const data = await res.json();
+  if (data.error) {
+    log(`Error: ${data.error}`, "err");
+  } else {
+    const planStr = JSON.stringify(data.plan, null, 0);
+    log(`Done. Plan: ${planStr}`, "ok");
+  }
+
+  btn.disabled = false;
+  btn.textContent = "Send";
+}
+
+
+// ============================================================
+//  MAP DRAWING
+// ============================================================
+
+function drawMap(path) {
+  const W = canvas.width;
+  const H = canvas.height;
+  const cx = W / 2;
+  const cy = H / 2;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid lines
+  ctx.strokeStyle = "rgba(42, 42, 42, 0.6)";
+  ctx.lineWidth = 0.5;
+  const gridStep = scale * 0.5;
+  for (let gx = cx % gridStep; gx < W; gx += gridStep) {
+    ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
+  }
+  for (let gy = cy % gridStep; gy < H; gy += gridStep) {
+    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+  }
+
+  // Axes
+  ctx.strokeStyle = "rgba(107, 114, 128, 0.4)";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(W, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
+
+  // Axis labels
+  ctx.fillStyle = "rgba(156, 163, 175, 0.6)";
+  ctx.font = "10px -apple-system, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("+X", W - 20, cy - 4);
+  ctx.textAlign = "center";
+  ctx.fillText("+Y", cx + 4, 14);
+
+  if (!path || path.length < 2) {
+    drawCircle(cx, cy, 5, "#10b981");
+    return;
+  }
+
+  // Path line
+  ctx.beginPath();
+  ctx.strokeStyle = "#0ea5e9";
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  for (let i = 0; i < path.length; i++) {
+    const px = cx + path[i].x * scale;
+    const py = cy - path[i].y * scale;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+
+  // Waypoint dots
+  ctx.fillStyle = "rgba(14, 165, 233, 0.4)";
+  for (let i = 1; i < path.length - 1; i++) {
+    const px = cx + path[i].x * scale;
+    const py = cy - path[i].y * scale;
+    ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Origin marker
+  drawCircle(cx, cy, 6, "#10b981");
+
+  // Robot (current position)
+  const last = path[path.length - 1];
+  const rx = cx + last.x * scale;
+  const ry = cy - last.y * scale;
+  drawCircle(rx, ry, 7, "#ef4444");
+
+  // Distance label
+  const dist = Math.sqrt(last.x ** 2 + last.y ** 2);
+  if (dist > 0.01) {
+    ctx.fillStyle = "rgba(229, 229, 229, 0.6)";
+    ctx.font = "10px -apple-system, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`${(dist * 100).toFixed(1)} cm from origin`, rx + 10, ry - 4);
+  }
+}
+
+function drawCircle(x, y, r, color) {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+
+// ============================================================
+//  POLLING — path + odometry
+// ============================================================
+
+async function updateMap() {
+  if (!mapVisible) return;
+  try {
+    const res = await fetch(`${PY_URL}/path`);
+    const data = await res.json();
+    pathData = data;
+    drawMap(data);
+  } catch { /* silent */ }
+}
+
+async function updateOdometry() {
+  try {
+    const res = await espGet("/position");
+    if (!res) return;
+    const data = await res.json();
+    document.getElementById("odo-x").textContent = parseFloat(data.x).toFixed(4);
+    document.getElementById("odo-y").textContent = parseFloat(data.y).toFixed(4);
+    const deg = (parseFloat(data.theta) * 180 / Math.PI).toFixed(1);
+    document.getElementById("odo-t").textContent = deg;
+  } catch { /* silent */ }
+}
+
+setInterval(updateMap, 1000);
+setInterval(updateOdometry, 1500);
+
+// Keyboard shortcuts for d-pad
+document.addEventListener("keydown", e => {
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) e.preventDefault();
+  if (e.key === "ArrowUp") startMove("forward");
+  if (e.key === "ArrowDown") startMove("backward");
+  if (e.key === "ArrowLeft") startMove("left");
+  if (e.key === "ArrowRight") startMove("right");
+});
+
+document.addEventListener("keyup", e => {
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) stopMove();
+});
+</script>
+
+</body>
+</html>
